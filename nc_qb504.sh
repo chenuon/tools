@@ -15,9 +15,9 @@ CACHE_SIZE=$((RAM / 8))
 sudo apt install curl unzip -y
 bash <(wget -qO- https://raw.githubusercontent.com/jerry048/Dedicated-Seedbox/main/Install.sh) -u $USER -p $PASSWORD -c $CACHE_SIZE -q 4.6.7 -l v1.2.20
 systemctl stop qbittorrent-nox@$USER
-systemctl disable qbittorrent-nox@$USER
+#systemctl disable qbittorrent-nox@$USER
 sudo cp /usr/bin/qbittorrent-nox /usr/bin/qbittorrent-nox1
-wget -O /usr/bin/qbittorrent-nox wget https://github.com/chenuon/jscode/releases/download/v5.0.4/qbittorrent-nox
+wget -O /usr/bin/qbittorrent-nox https://github.com/chenuon/jscode/releases/download/v5.0.4/qbittorrent-nox
 chmod +x /usr/bin/qbittorrent-nox
 sed -i "s/WebUI\\\\Port=[0-9]*/WebUI\\\\Port=$PORT/" /home/$USER/.config/qBittorrent/qBittorrent.conf
 sed -i "s/Connection\\\\PortRangeMin=[0-9]*/Connection\\\\PortRangeMin=$UP_PORT/" /home/$USER/.config/qBittorrent/qBittorrent.conf
