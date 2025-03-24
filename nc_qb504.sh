@@ -12,6 +12,7 @@ UP_PORT=${4:-23333}
 RAM=$(free -m | awk '/^Mem:/{print $2}')
 CACHE_SIZE=$((RAM / 8))
 
+sudo apt install curl unzip -y
 bash <(wget -qO- https://raw.githubusercontent.com/jerry048/Dedicated-Seedbox/main/Install.sh) -u $USER -p $PASSWORD -c $CACHE_SIZE -q 4.6.7 -l v1.2.20
 systemctl stop qbittorrent-nox@$USER
 systemctl disable qbittorrent-nox@$USER
