@@ -53,7 +53,7 @@ if [ ! -f "$QBT_MARK" ]; then
     
     # 修改配置
     sed -i "s/WebUI\\\\Port=[0-9]*/WebUI\\\\Port=$PORT/" /home/$USER/.config/qBittorrent/qBittorrent.conf
-    sed -i "s/Connection\\\\PortRangeMin=[0-9]*/Connection\\\\PortRangeMin=$UP_PORT/" /home/$USER/.config/qBittorrent/qBittorrent.conf
+    sed -i "s/Session\\\\Port=[0-9]*/Session\\\\Port=$UP_PORT/" /home/$USER/.config/qBittorrent/qBittorrent.conf
     sed -i "/\\[Preferences\\]/a Downloads\\\\PreAllocation=false" /home/$USER/.config/qBittorrent/qBittorrent.conf
     sed -i "/\\[Preferences\\]/a WebUI\\\\CSRFProtection=false" /home/$USER/.config/qBittorrent/qBittorrent.conf
     
