@@ -64,7 +64,7 @@ if [ ! -f "$QBT_MARK" ]; then
     # 标记 qBittorrent 安装完成
     touch "$QBT_MARK"
     
-    echo "qBittorrent 安装配置完成，准备重启..."
+    echo "qBittorrent 安装配置完成,接下来准备重启2次,请耐心等待3~5分钟..."
     # 更新系统
     apt update -y
     apt upgrade -y
