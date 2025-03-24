@@ -1,0 +1,7 @@
+#!/bin/bash
+
+systemctl enable qbittorrent-nox@chenyong
+systemctl start qbittorrent-nox@chenyong
+bash <(wget -qO- https://raw.githubusercontent.com/guowanghushifu/Seedbox-Components/refs/heads/main/BBR/BBRx/BBRy.sh)
+sleep 3
+reboot
