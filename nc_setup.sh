@@ -73,9 +73,11 @@ if [ ! -f "$QBT_MARK" ]; then
     cat > /root/continue_setup.sh << 'EOF'
 #!/bin/bash
 if [ ! -f "/root/.nc_bbr_completed" ]; then
-    sleep 30  # 等待系统完全启动
+    sleep 60  # 等待系统完全启动
     bash <(wget -qO- https://raw.githubusercontent.com/guowanghushifu/Seedbox-Components/refs/heads/main/BBR/BBRx/BBRy.sh)
+    sleep 3
     bash <(wget -qO- "https://net1999.net/misc/vnstat.sh")
+    sleep 3
     systemctl enable vnstat
     systemctl start vnstat
     touch /root/.nc_bbr_completed
@@ -93,6 +95,7 @@ EOF
     chmod 644 /etc/cron.d/continue_setup
     
     # 第一次重启
+    sleep 3
     reboot
     
 elif [ ! -f "$BBR_MARK" ]; then
