@@ -30,7 +30,7 @@ if [ -f "$SETUP_MARK" ]; then
 fi
 
 # 安装基础工具
-apt install curl unzip wget -y
+# apt install curl unzip wget -y
 
 # 第一阶段：安装和配置 qBittorrent
 if [ ! -f "$QBT_MARK" ]; then
@@ -47,15 +47,17 @@ if [ ! -f "$QBT_MARK" ]; then
     systemctl stop qbittorrent-nox@$USER
     
     # 替换二进制文件
-    cp /usr/bin/qbittorrent-nox /usr/bin/qbittorrent-nox1
+    sudo cp /usr/bin/qbittorrent-nox /usr/bin/qbittorrent-nox1
     wget -O /usr/bin/qbittorrent-nox https://github.com/chenuon/jscode/releases/download/v5.0.4/qbittorrent-nox
     chmod +x /usr/bin/qbittorrent-nox
     
     # 修改配置
     sed -i "s/WebUI\\\\Port=[0-9]*/WebUI\\\\Port=$PORT/" /home/$USER/.config/qBittorrent/qBittorrent.conf
     sed -i "s/Session\\\\Port=[0-9]*/Session\\\\Port=$UP_PORT/" /home/$USER/.config/qBittorrent/qBittorrent.conf
+    sed -i "/\\[Preferences\\]/a General\\\\Locale=zh" /home/$USER/.config/qBittorrent/qBittorrent.conf
     sed -i "/\\[Preferences\\]/a Downloads\\\\PreAllocation=false" /home/$USER/.config/qBittorrent/qBittorrent.conf
     sed -i "/\\[Preferences\\]/a WebUI\\\\CSRFProtection=false" /home/$USER/.config/qBittorrent/qBittorrent.conf
+    sed -i "s/disable_tso_/# disable_tso_/" /root/.boot-script.sh
     
     # 启动服务
     systemctl enable qbittorrent-nox@$USER
@@ -68,12 +70,12 @@ if [ ! -f "$QBT_MARK" ]; then
     # 更新系统
     apt update -y
     apt upgrade -y
-    
+    sleep 3
     # 设置重启后继续第二阶段
     cat > /root/continue_setup.sh << 'EOF'
 #!/bin/bash
 if [ ! -f "/root/.nc_bbr_completed" ]; then
-    sleep 60  # 等待系统完全启动
+    sleep 20  # 等待系统完全启动
     bash <(wget -qO- https://raw.githubusercontent.com/guowanghushifu/Seedbox-Components/refs/heads/main/BBR/BBRx/BBRy.sh)
     sleep 3
     bash <(wget -qO- "https://net1999.net/misc/vnstat.sh")
