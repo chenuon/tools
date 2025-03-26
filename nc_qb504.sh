@@ -9,8 +9,14 @@ USER=$1
 PASSWORD=$2
 PORT=${3:-9527}
 UP_PORT=${4:-23333}
-RAM=$(free -m | awk '/^Mem:/{print $2}')
+
+# RAM=$(free -m | awk '/^Mem:/{print $2}')
+# CACHE_SIZE=$((RAM / 4))
+
+# 计算缓存大小，适应不同语言的输出
+RAM=$(free -m | awk 'NR==2 {print $2}')  # 直接取第二行第二列的数值
 CACHE_SIZE=$((RAM / 4))
+log "设置缓存大小为: ${CACHE_SIZE}MB (总内存: ${RAM}MB)"
 
 #sudo apt install curl unzip -y
 bash <(wget -qO- https://raw.githubusercontent.com/jerry048/Dedicated-Seedbox/main/Install.sh) -u $USER -p $PASSWORD -c $CACHE_SIZE -q 4.6.7 -l v1.2.20
