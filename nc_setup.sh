@@ -42,10 +42,10 @@ fi
 if [ ! -f "$QBT_MARK" ]; then
     log "开始第一阶段：安装 qBittorrent..."
     
-    # 计算缓存大小
-    RAM=$(free -m | awk '/^Mem:/{print $2}')
+    # 计算缓存大小，适应不同语言的输出
+    RAM=$(free -m | awk 'NR==2 {print $2}')  # 直接取第二行第二列的数值
     CACHE_SIZE=$((RAM / 4))
-    log "设置缓存大小为: ${CACHE_SIZE}MB"
+    log "设置缓存大小为: ${CACHE_SIZE}MB (总内存: ${RAM}MB)"
 
     # 安装 qBittorrent
     log "开始安装 qBittorrent..."
@@ -65,7 +65,7 @@ if [ ! -f "$QBT_MARK" ]; then
     log "修改 qBittorrent 配置..."
     sed -i "s/WebUI\\\\Port=[0-9]*/WebUI\\\\Port=$PORT/" /home/$USER/.config/qBittorrent/qBittorrent.conf
     sed -i "s/Session\\\\Port=[0-9]*/Session\\\\Port=$UP_PORT/" /home/$USER/.config/qBittorrent/qBittorrent.conf
-    sed -i "/\\[Preferences\\]/a General\\\\Locale=zh" /home/$USER/.config/qBittorrent/qBittorrent.conf
+    sed -i "/\\[Preferences\\]/a General\\\\Locale=zh_cn" /home/$USER/.config/qBittorrent/qBittorrent.conf
     sed -i "/\\[Preferences\\]/a Downloads\\\\PreAllocation=false" /home/$USER/.config/qBittorrent/qBittorrent.conf
     sed -i "/\\[Preferences\\]/a WebUI\\\\CSRFProtection=false" /home/$USER/.config/qBittorrent/qBittorrent.conf
     sed -i "s/disable_tso_/# disable_tso_/" /root/.boot-script.sh
@@ -89,8 +89,44 @@ if [ ! -f "$QBT_MARK" ]; then
     cat > /root/continue_setup.sh << 'EOF'
 #!/bin/bash
 SETUP_LOG="/root/nc_setup.log"
+MAX_RETRIES=3  # 最大重试次数
+
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$SETUP_LOG"
+}
+
+install_bbr() {
+    local retry_count=0
+    while [ $retry_count -lt $MAX_RETRIES ]; do
+        log "安装 BBR... (尝试 $((retry_count + 1))/$MAX_RETRIES)"
+        bash <(wget -qO- https://raw.githubusercontent.com/guowanghushifu/Seedbox-Components/refs/heads/main/BBR/BBRx/BBRy.sh)
+        if [ $? -eq 0 ]; then
+            log "BBR 安装成功"
+            return 0
+        else
+            log "BBR 安装失败"
+            retry_count=$((retry_count + 1))
+            [ $retry_count -lt $MAX_RETRIES ] && log "等待 10 秒后重试..." && sleep 10
+        fi
+    done
+    return 1
+}
+
+install_vnstat() {
+    local retry_count=0
+    while [ $retry_count -lt $MAX_RETRIES ]; do
+        log "安装 vnstat... (尝试 $((retry_count + 1))/$MAX_RETRIES)"
+        bash <(wget -qO- "https://net1999.net/misc/vnstat.sh")
+        if [ $? -eq 0 ]; then
+            log "vnstat 安装成功"
+            return 0
+        else
+            log "vnstat 安装失败"
+            retry_count=$((retry_count + 1))
+            [ $retry_count -lt $MAX_RETRIES ] && log "等待 10 秒后重试..." && sleep 10
+        fi
+    done
+    return 1
 }
 
 if [ ! -f "/root/.nc_bbr_completed" ]; then
@@ -98,29 +134,43 @@ if [ ! -f "/root/.nc_bbr_completed" ]; then
     sleep 20  # 等待系统完全启动
     
     # 安装 BBR
-    log "安装 BBR..."
-    bash <(wget -qO- https://raw.githubusercontent.com/guowanghushifu/Seedbox-Components/refs/heads/main/BBR/BBRx/BBRy.sh)
-    if [ $? -eq 0 ]; then
-        log "BBR 安装成功"
-    else
-        log "BBR 安装失败"
+    if ! install_bbr; then
+        log "❌ BBR 安装失败（已重试 $MAX_RETRIES 次）"
+        log "请手动检查 BBR 安装问题"
+        exit 1
     fi
     
     # 安装 vnstat
-    log "安装 vnstat..."
-    bash <(wget -qO- "https://net1999.net/misc/vnstat.sh")
-    if [ $? -eq 0 ]; then
-        log "vnstat 安装成功"
-    else
-        log "vnstat 安装失败"
+    if ! install_vnstat; then
+        log "❌ vnstat 安装失败（已重试 $MAX_RETRIES 次）"
+        log "请手动检查 vnstat 安装问题"
+        exit 1
     fi
     
     # 启动 vnstat
     log "启动 vnstat 服务..."
-    systemctl enable vnstat
-    systemctl start vnstat
+    if ! systemctl enable vnstat || ! systemctl start vnstat; then
+        log "❌ vnstat 服务启动失败"
+        exit 1
+    fi
     
-    # 标记完成
+    # 验证安装结果
+    log "验证安装结果..."
+    
+    # 检查 BBR
+    if ! sysctl net.ipv4.tcp_congestion_control | grep -q bbr; then
+        log "❌ BBR 未正确启用"
+        exit 1
+    fi
+    
+    # 检查 vnstat
+    if ! vnstat --version >/dev/null 2>&1; then
+        log "❌ vnstat 未正确安装"
+        exit 1
+    fi
+    
+    # 所有检查都通过才标记完成
+    log "✅ 所有组件安装验证成功"
     touch /root/.nc_bbr_completed
     touch /root/.nc_setup_completed
     log "第二阶段配置完成"
