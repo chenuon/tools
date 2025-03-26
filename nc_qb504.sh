@@ -24,6 +24,7 @@ sed -i "s/Session\\\\Port=[0-9]*/Session\\\\Port=$UP_PORT/" /home/$USER/.config/
 sed -i "/\\[Preferences\\]/a General\\\\Locale=zh" /home/$USER/.config/qBittorrent/qBittorrent.conf
 sed -i "/\\[Preferences\\]/a Downloads\\\\PreAllocation=false" /home/$USER/.config/qBittorrent/qBittorrent.conf
 sed -i "/\\[Preferences\\]/a WebUI\\\\CSRFProtection=false" /home/$USER/.config/qBittorrent/qBittorrent.conf
+sed -i "s/disable_tso_/# disable_tso_/" /root/.boot-script.sh
 systemctl enable qbittorrent-nox@chenyong
 systemctl start qbittorrent-nox@chenyong
 sudo apt update -y
