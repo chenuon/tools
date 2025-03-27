@@ -6,6 +6,7 @@ SETUP_MARK="/root/.nc_setup_completed"
 QB_MARK="/root/.nc_qbt_completed"
 BBR_MARK="/root/.nc_bbr_completed"
 REBOOT_MARK="/root/.nc_reboot_needed"
+BBR_REBOOT_MARK="/root/.nc_bbr_reboot_needed"
 
 # 清空日志文件
 > "$SETUP_LOG"
@@ -16,11 +17,24 @@ log() {
     local message=$2
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     case $level in
-        "INFO")  echo -e "[$timestamp] \033[32m[INFO]\033[0m $message" ;;
-        "WARN")  echo -e "[$timestamp] \033[33m[WARN]\033[0m $message" ;;
-        "ERROR") echo -e "[$timestamp] \033[31m[ERROR]\033[0m $message" ;;
-        *)       echo -e "[$timestamp] [UNKNOWN] $message" ;;
-    esac | tee -a "$SETUP_LOG"
+        "INFO")  echo -e "[$timestamp] \033[32m[INFO]\033[0m $message" | tee -a "$SETUP_LOG" ;;
+        "WARN")  echo -e "[$timestamp] \033[33m[WARN]\033[0m $message" | tee -a "$SETUP_LOG" ;;
+        "ERROR") echo -e "[$timestamp] \033[31m[ERROR]\033[0m $message" | tee -a "$SETUP_LOG" ;;
+        *)       echo -e "[$timestamp] [UNKNOWN] $message" | tee -a "$SETUP_LOG" ;;
+    esac
+}
+
+# 记录命令输出
+log_cmd() {
+    local cmd="$1"
+    local desc="$2"
+    {
+        echo "----------------------------------------"
+        echo "$desc ($(date '+%Y-%m-%d %H:%M:%S'))"
+        echo "----------------------------------------"
+        eval "$cmd" 2>&1
+        echo "----------------------------------------"
+    } >> "$SETUP_LOG"
 }
 
 # 系统信息记录函数
@@ -142,56 +156,46 @@ EOFMARKER
     
 elif [ -f "$REBOOT_MARK" ]; then
     log "INFO" "检测到重启标记，开始执行第二阶段安装..."
-    rm "$REBOOT_MARK"  # 删除重启标记
+    rm "$REBOOT_MARK"  # 删除第一阶段重启标记
     
-    log "INFO" "等待系统完全启动 (20秒)..."
-    sleep 20
-    
-    # 记录重启后的系统状态
-    {
-        echo "----------------------------------------"
-        echo "重启后系统状态 ($(date '+%Y-%m-%d %H:%M:%S'))"
-        echo "----------------------------------------"
-        echo "系统启动时间:"
-        uptime
-        echo "----------------------------------------"
-        echo "系统负载:"
-        cat /proc/loadavg
-        echo "----------------------------------------"
-        echo "网络连接状态:"
-        netstat -tuln
-        echo "----------------------------------------"
-        echo "qBittorrent 服务状态:"
-        systemctl status qbittorrent-nox@root
-        echo "----------------------------------------"
-    } >> "$SETUP_LOG"
-    
-    # 安装 BBR
-    log "INFO" "开始安装 BBR..."
-    {
-        echo "----------------------------------------"
-        echo "BBR 安装日志 ($(date '+%Y-%m-%d %H:%M:%S'))"
-        echo "----------------------------------------"
-        bash <(wget -qO- https://raw.githubusercontent.com/chenuon/tools/refs/heads/main/nc_bbr.sh) 2>&1
-        echo "----------------------------------------"
-    } >> "$SETUP_LOG"
-    
-    # 验证 BBR 安装
-    if sysctl net.ipv4.tcp_congestion_control | grep -q bbr; then
-        log "INFO" "BBR 安装成功并已启用"
-        sysctl net.ipv4.tcp_congestion_control >> "$SETUP_LOG"
-    else
-        log "ERROR" "BBR 可能未正确安装"
-        sysctl net.ipv4.tcp_congestion_control >> "$SETUP_LOG"
+    if [ ! -f "$BBR_REBOOT_MARK" ]; then
+        # BBR 安装前的准备
+        log "INFO" "开始安装 BBR..."
+        touch "$BBR_REBOOT_MARK"
+        
+        {
+            echo "----------------------------------------"
+            echo "BBR 安装日志 ($(date '+%Y-%m-%d %H:%M:%S'))"
+            echo "----------------------------------------"
+            bash <(wget -qO- https://raw.githubusercontent.com/chenuon/tools/refs/heads/main/nc_bbr.sh) 2>&1
+            echo "----------------------------------------"
+        } >> "$SETUP_LOG"
+        
+        # BBR 脚本会自动重启，不需要我们手动重启
+        exit 0
+        
+    elif [ -f "$BBR_REBOOT_MARK" ]; then
+        # BBR 安装后的检查
+        log "INFO" "BBR 安装后检查..."
+        rm "$BBR_REBOOT_MARK"
+        
+        # 验证 BBR 安装
+        if sysctl net.ipv4.tcp_congestion_control | grep -q bbr; then
+            log "INFO" "BBR 安装成功并已启用"
+            sysctl net.ipv4.tcp_congestion_control >> "$SETUP_LOG"
+        else
+            log "ERROR" "BBR 可能未正确安装"
+            sysctl net.ipv4.tcp_congestion_control >> "$SETUP_LOG"
+        fi
+        
+        # 安装完成后的状态检查
+        log_cmd "systemctl status qbittorrent-nox@$USER" "qBittorrent 服务状态"
+        log_cmd "sysctl net.ipv4.tcp_congestion_control" "BBR 状态"
+        log_cmd "netstat -tuln" "端口监听状态"
+        
+        # 标记完成
+        touch "$BBR_MARK"
+        touch "$SETUP_MARK"
+        log "INFO" "全部安装完成"
     fi
-    
-    # 标记完成
-    touch "$BBR_MARK"
-    touch "$SETUP_MARK"
-    log "INFO" "全部安装完成"
-    
-    # 清理
-    rm -f /etc/init.d/nc-setup-phase2
-    update-rc.d nc-setup-phase2 remove
-    exit 0
 fi 
