@@ -5,6 +5,7 @@ SETUP_LOG="/root/nc_setup.log"
 SETUP_MARK="/root/.nc_setup_completed"
 QB_MARK="/root/.nc_qbt_completed"
 BBR_MARK="/root/.nc_bbr_completed"
+REBOOT_MARK="/root/.nc_reboot_needed"
 
 # 清空日志文件
 > "$SETUP_LOG"
@@ -72,55 +73,11 @@ if [ -f "$SETUP_MARK" ]; then
     exit 0
 fi
 
-# 第一阶段：安装 qBittorrent
-if [ ! -f "$QB_MARK" ]; then
-    log "INFO" "开始第一阶段：安装 qBittorrent..."
-    log "INFO" "下载 qBittorrent 安装脚本..."
+# 检查是否是重启后的第二阶段
+if [ -f "$REBOOT_MARK" ]; then
+    log "INFO" "检测到重启标记，开始执行第二阶段安装..."
+    rm "$REBOOT_MARK"  # 删除重启标记
     
-    # 创建一个包装函数来捕获安装脚本的输出
-    install_qbittorrent() {
-        {
-            echo "----------------------------------------"
-            echo "qBittorrent 安装日志 ($(date '+%Y-%m-%d %H:%M:%S'))"
-            echo "----------------------------------------"
-            bash <(wget -qO- https://raw.githubusercontent.com/chenuon/tools/refs/heads/main/nc_qb504.sh) "$USER" "$PASSWORD" "$PORT" "$UP_PORT" 2>&1
-            echo "----------------------------------------"
-        } >> "$SETUP_LOG"
-    }
-    
-    install_qbittorrent
-    
-    # 设置重启后继续第二阶段
-    log "INFO" "创建第二阶段安装脚本..."
-    cat > /root/continue_setup.sh << 'EOF'
-#!/bin/bash
-SETUP_LOG="/root/nc_setup.log"
-BBR_MARK="/root/.nc_bbr_completed"
-SETUP_MARK="/root/.nc_setup_completed"
-
-# 日志函数
-log() {
-    local level=$1
-    local message=$2
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    case $level in
-        "INFO")  echo -e "[$timestamp] \033[32m[INFO]\033[0m $message" ;;
-        "WARN")  echo -e "[$timestamp] \033[33m[WARN]\033[0m $message" ;;
-        "ERROR") echo -e "[$timestamp] \033[31m[ERROR]\033[0m $message" ;;
-        *)       echo -e "[$timestamp] [UNKNOWN] $message" ;;
-    esac | tee -a "$SETUP_LOG"
-}
-
-# 检查服务状态函数
-check_service_status() {
-    local service_name=$1
-    local status=$(systemctl is-active $service_name)
-    log "INFO" "$service_name 服务状态: $status"
-    systemctl status $service_name >> "$SETUP_LOG" 2>&1
-}
-
-if [ ! -f "$BBR_MARK" ]; then
-    log "INFO" "开始第二阶段：安装 BBR..."
     log "INFO" "等待系统完全启动 (20秒)..."
     sleep 20
     
@@ -144,6 +101,7 @@ if [ ! -f "$BBR_MARK" ]; then
     } >> "$SETUP_LOG"
     
     # 安装 BBR
+    log "INFO" "开始安装 BBR..."
     {
         echo "----------------------------------------"
         echo "BBR 安装日志 ($(date '+%Y-%m-%d %H:%M:%S'))"
@@ -161,53 +119,46 @@ if [ ! -f "$BBR_MARK" ]; then
         sysctl net.ipv4.tcp_congestion_control >> "$SETUP_LOG"
     fi
     
-    # 检查服务状态
-    check_service_status "qbittorrent-nox@root"
-    
     # 标记完成
     touch "$BBR_MARK"
     touch "$SETUP_MARK"
     log "INFO" "全部安装完成"
-    
-    # 清理
-    log "INFO" "清理临时文件..."
-    rm /root/continue_setup.sh
-    rm /etc/cron.d/continue_setup
+    exit 0
 fi
+
+# 第一阶段：安装 qBittorrent
+if [ ! -f "$QB_MARK" ]; then
+    log "INFO" "开始第一阶段：安装 qBittorrent..."
+    log "INFO" "下载 qBittorrent 安装脚本..."
+    
+    # 创建一个包装函数来捕获安装脚本的输出
+    install_qbittorrent() {
+        {
+            echo "----------------------------------------"
+            echo "qBittorrent 安装日志 ($(date '+%Y-%m-%d %H:%M:%S'))"
+            echo "----------------------------------------"
+            bash <(wget -qO- https://raw.githubusercontent.com/chenuon/tools/refs/heads/main/nc_qb504.sh) "$USER" "$PASSWORD" "$PORT" "$UP_PORT" 2>&1
+            echo "----------------------------------------"
+        } >> "$SETUP_LOG"
+    }
+    
+    install_qbittorrent
+    
+    # 创建重启标记
+    touch "$REBOOT_MARK"
+    
+    # 添加重启后自动执行的脚本
+    cat > /etc/rc.local << 'EOF'
+#!/bin/bash
+if [ -f /root/.nc_reboot_needed ]; then
+    /bin/bash /root/nc_setup_all.sh
+fi
+exit 0
 EOF
     
-    chmod +x /root/continue_setup.sh
-    
-    # 创建 systemd 服务来执行第二阶段
-    log "INFO" "创建 systemd 服务用于第二阶段安装..."
-    cat > /etc/systemd/system/nc-setup-phase2.service << 'EOF'
-[Unit]
-Description=NC Setup Phase 2
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=oneshot
-ExecStart=/root/continue_setup.sh
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    chmod 644 /etc/systemd/system/nc-setup-phase2.service
-    
-    # 启用服务
-    systemctl daemon-reload
-    systemctl enable nc-setup-phase2.service
+    chmod +x /etc/rc.local
     
     log "INFO" "第一阶段完成，系统将在 3 秒后重启..."
     sleep 3
     reboot
-    
-elif [ ! -f "$BBR_MARK" ]; then
-    log "INFO" "继续执行第二阶段安装..."
-    # 手动执行第二阶段脚本
-    /bin/bash /root/continue_setup.sh
-    exit 0
 fi 
