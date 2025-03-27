@@ -73,8 +73,74 @@ if [ -f "$SETUP_MARK" ]; then
     exit 0
 fi
 
-# 检查是否是重启后的第二阶段
-if [ -f "$REBOOT_MARK" ]; then
+# 第一阶段：安装 qBittorrent
+if [ ! -f "$QB_MARK" ]; then
+    log "INFO" "开始第一阶段：安装 qBittorrent..."
+    log "INFO" "下载 qBittorrent 安装脚本..."
+    
+    # 创建一个包装函数来捕获安装脚本的输出
+    install_qbittorrent() {
+        {
+            echo "----------------------------------------"
+            echo "qBittorrent 安装日志 ($(date '+%Y-%m-%d %H:%M:%S'))"
+            echo "----------------------------------------"
+            bash <(wget -qO- https://raw.githubusercontent.com/chenuon/tools/refs/heads/main/nc_qb504.sh) "$USER" "$PASSWORD" "$PORT" "$UP_PORT" 2>&1
+            echo "----------------------------------------"
+        } >> "$SETUP_LOG"
+    }
+    
+    install_qbittorrent
+    touch "$QB_MARK"
+    
+    # 创建重启标记
+    touch "$REBOOT_MARK"
+    
+    # 创建启动脚本
+    cat > /etc/init.d/nc-setup-phase2 << 'EOFMARKER'
+#!/bin/bash
+### BEGIN INIT INFO
+# Provides:          nc-setup-phase2
+# Required-Start:    $network $local_fs $remote_fs
+# Required-Stop:     $network $local_fs $remote_fs
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: NC Setup Phase 2
+# Description:       Execute phase 2 of NC setup after reboot
+### END INIT INFO
+
+case "$1" in
+  start)
+    if [ -f /root/.nc_reboot_needed ]; then
+        /bin/bash /root/nc_setup_all.sh
+    fi
+    ;;
+  stop)
+    ;;
+  restart)
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|restart}"
+    exit 1
+    ;;
+esac
+exit 0
+EOFMARKER
+
+    # 设置正确的权限并启用服务
+    chmod 755 /etc/init.d/nc-setup-phase2
+    update-rc.d nc-setup-phase2 defaults
+    
+    # 复制当前脚本到固定位置（如果不在 /root 目录）
+    if [ "$(pwd)" != "/root" ]; then
+        cp "$0" /root/nc_setup_all.sh
+        chmod +x /root/nc_setup_all.sh
+    fi
+    
+    log "INFO" "第一阶段完成，系统将在 3 秒后重启..."
+    sleep 3
+    reboot
+    
+elif [ -f "$REBOOT_MARK" ]; then
     log "INFO" "检测到重启标记，开始执行第二阶段安装..."
     rm "$REBOOT_MARK"  # 删除重启标记
     
@@ -123,42 +189,9 @@ if [ -f "$REBOOT_MARK" ]; then
     touch "$BBR_MARK"
     touch "$SETUP_MARK"
     log "INFO" "全部安装完成"
+    
+    # 清理
+    rm -f /etc/init.d/nc-setup-phase2
+    update-rc.d nc-setup-phase2 remove
     exit 0
-fi
-
-# 第一阶段：安装 qBittorrent
-if [ ! -f "$QB_MARK" ]; then
-    log "INFO" "开始第一阶段：安装 qBittorrent..."
-    log "INFO" "下载 qBittorrent 安装脚本..."
-    
-    # 创建一个包装函数来捕获安装脚本的输出
-    install_qbittorrent() {
-        {
-            echo "----------------------------------------"
-            echo "qBittorrent 安装日志 ($(date '+%Y-%m-%d %H:%M:%S'))"
-            echo "----------------------------------------"
-            bash <(wget -qO- https://raw.githubusercontent.com/chenuon/tools/refs/heads/main/nc_qb504.sh) "$USER" "$PASSWORD" "$PORT" "$UP_PORT" 2>&1
-            echo "----------------------------------------"
-        } >> "$SETUP_LOG"
-    }
-    
-    install_qbittorrent
-    
-    # 创建重启标记
-    touch "$REBOOT_MARK"
-    
-    # 添加重启后自动执行的脚本
-    cat > /etc/rc.local << 'EOF'
-#!/bin/bash
-if [ -f /root/.nc_reboot_needed ]; then
-    /bin/bash /root/nc_setup_all.sh
-fi
-exit 0
-EOF
-    
-    chmod +x /etc/rc.local
-    
-    log "INFO" "第一阶段完成，系统将在 3 秒后重启..."
-    sleep 3
-    reboot
 fi 
