@@ -166,25 +166,6 @@ if [ ! -f "$BBR_MARK" ]; then
     touch "$SETUP_MARK"
     log "INFO" "全部安装完成"
     
-    # 记录最终系统状态
-    {
-        echo "----------------------------------------"
-        echo "最终系统状态 ($(date '+%Y-%m-%d %H:%M:%S'))"
-        echo "----------------------------------------"
-        echo "已安装的软件包:"
-        dpkg -l | grep -E "qbittorrent|vnstat"
-        echo "----------------------------------------"
-        echo "系统服务状态:"
-        systemctl list-units --type=service --state=running
-        echo "----------------------------------------"
-        echo "网络配置:"
-        ip addr
-        echo "----------------------------------------"
-        echo "路由表:"
-        ip route
-        echo "----------------------------------------"
-    } >> "$SETUP_LOG"
-    
     # 清理
     log "INFO" "清理临时文件..."
     rm /root/continue_setup.sh
@@ -194,9 +175,13 @@ EOF
     
     chmod +x /root/continue_setup.sh
     
-    # 添加一次性的 cron 任务
-    echo "@reboot root /root/continue_setup.sh" > /etc/cron.d/continue_setup
+    # 添加一次性的 cron 任务，使用绝对路径
+    echo "@reboot root /bin/bash /root/continue_setup.sh" > /etc/cron.d/continue_setup
     chmod 644 /etc/cron.d/continue_setup
+    
+    # 确保 cron 服务正在运行
+    systemctl enable cron
+    systemctl start cron
     
     log "INFO" "第一阶段完成，系统将在 3 秒后重启..."
     sleep 3
