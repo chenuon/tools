@@ -6,6 +6,9 @@ SETUP_MARK="/root/.nc_setup_completed"
 QB_MARK="/root/.nc_qbt_completed"
 BBR_MARK="/root/.nc_bbr_completed"
 
+# 清空日志文件
+> "$SETUP_LOG"
+
 # 日志函数，支持日志级别
 log() {
     local level=$1
@@ -175,13 +178,28 @@ EOF
     
     chmod +x /root/continue_setup.sh
     
-    # 添加一次性的 cron 任务，使用绝对路径
-    echo "@reboot root /bin/bash /root/continue_setup.sh" > /etc/cron.d/continue_setup
-    chmod 644 /etc/cron.d/continue_setup
+    # 创建 systemd 服务来执行第二阶段
+    log "INFO" "创建 systemd 服务用于第二阶段安装..."
+    cat > /etc/systemd/system/nc-setup-phase2.service << 'EOF'
+[Unit]
+Description=NC Setup Phase 2
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/root/continue_setup.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    chmod 644 /etc/systemd/system/nc-setup-phase2.service
     
-    # 确保 cron 服务正在运行
-    systemctl enable cron
-    systemctl start cron
+    # 启用服务
+    systemctl daemon-reload
+    systemctl enable nc-setup-phase2.service
     
     log "INFO" "第一阶段完成，系统将在 3 秒后重启..."
     sleep 3
@@ -189,6 +207,7 @@ EOF
     
 elif [ ! -f "$BBR_MARK" ]; then
     log "INFO" "继续执行第二阶段安装..."
-    # 脚本会通过 continue_setup.sh 自动执行
+    # 手动执行第二阶段脚本
+    /bin/bash /root/continue_setup.sh
     exit 0
 fi 
